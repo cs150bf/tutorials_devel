@@ -1,0 +1,612 @@
+<div style="color:#B22222;font-size:115%">
+[[File:SAlbcgt9_casper_logo-1.png|right|100px]]
+
+<b>
+Tutorial 1: Introduction to Simulink
+</b>
+
+Authors: [[user:mwagner | M. Wagner]] (Version 1), J. Manley and W. New (Version 2), [[user:siemion | A. Siemion]] (Version 3)
+
+Expected completion time: 2 hours
+
+</div>
+----
+<br/>
+<div style="background:#FFFFFF;font-size:115%">
+= Introduction =
+In this tutorial, you will create a simple Simulink design using both standard Xilinx system generator blockset, as well as library blocks specific to [[ROACH]]. At the end of this tutorial, you will have a [[BORPH]] executable file (a BOF file) and you will know how to interact with your running hardware design using [[BORPH]].
+
+= Setup =
+
+Click here for [[LOCATIONSandFILES |Complete information of Turorial Lab & Setup ]] at Casper Workshop 2011, Pune, India. The lab at the workshop is pre-configured with the CASPER libraries, Matlab and Xilinx tools. If you want to try this tutorial in your lab, please refer the topics : H/W & S/W requirements , SET-UP of Tutorials at WORKSHOP 2011 ,Compiling the Design & Programming on ROACH FPGA and Locations & Files information for the WORKSHOP 2011 wherever applicable in the link [[LOCATIONSandFILES |Complete information of Turorial Lab & Setup ]].
+
+= Creating Your Design =
+== Create a New Model ==
+Start Matlab and open Simulink (either by typing <i>simulink</i> on the Matlab command line, or by clicking the Simulink icon in the Matlab taskbar).
+
+Create a new model:
+
+[[File:Sim_lib_browser.png|400px|center|Simulink Library Browser]]
+
+== Add Xilinx System Generator and XSG core config blocks ==
+Add a System generator block from the Xilinx library by locating the <i>Xilinx Blockset</i> library's <i>Basic Elements</i> subsection and dragging a <i>System Generator</i> token onto your new file. 
+
+[[File:sysgen_select.png|500px|center|SysGen Select]]
+
+Do not configure it directly, but rather add an <i>XSG core config</i> from the <i>CASPER XPS Blockset</i> library to do this for you:
+
+[[File:Casper_xps_blockset_select.png|500px|center|Coreconfig Select]]
+
+All hardware-related blocks are yellow and can be found in the <i>CASPER XPS library</i>. This library contains all the board-specific components colloquially called "Yellow Blocks."
+
+DSP related blocks are found in the <i>CASPER DSP</i> library and have other colours. Tutorial 3 will introduce you to these blocks.
+
+Double click on the XSG core config block that you just added. Set it for ROACH2:sx475t with sys_clk as the clock source. sys_clk is an onboard 100MHz crystal.  
+
+Leave everything else defaults and click OK.
+
+Clocking options include:
+sys_clk: This is an onboard 100MHz crystal which is connected to the FPGA. Can also be used to define an arbitary clock: 100MHz crystal with DCM to produce any frequency.).
+aux_clk (usr_clk on older platforms): SMA input to board. PLL'd versions of these clocks are also available.
+adcX_clk: For use in conjuction with ADC boards, clock the FPGA off the ADC. For iADC and KATADC, this is 1/4 of sampling rate (ADCs demux internally). You need to use one of these clocks if you are using an ADC.
+dacX_clk:
+
+[[File:core_config_params.png|500px|center|CoreConfig Parameters]]
+
+This will go off and configure the System Generator block which you previously added.
+
+You need to add these two blocks for all CASPER designs.
+
+== Flashing LED ==
+To demonstrate the basic use of hardware interfaces, we will make an LED flash. With the FPGA running at 100MHz, the most significant bit (msb) of a 27 bit counter will toggle every 0.67 seconds. We can output this bit to an LED on ROACH2. ROACH2 has eight LEDs: 4 green (lower 4 bits) and 4 red LEDs (upper 4 bits). We will now connect a counter to the first one.
+
+=== Add a counter ===
+Add a counter to your design by navigating to Xilinx Blockset -> Basic Elements -> Counter and dragging it onto your model.
+
+[[File:counter_select.png|500px|center|Counter Select]]
+
+Double-click it and set it for free running, 27 bits, unsigned.
+
+[[File:counter_params.png|500px|center|Counter Parameters]]
+
+=== Add a slice block to select out the msb ===
+We now need to select the [http://en.wikipedia.org/wiki/Most_significant_bit most significant bit] (msb) of the counter. We do this using a slice block, which Xilinx provides. Xilinx Blockset -> Basic Elements -> Slice.
+
+[[File:slice_select.png|500px|center|Slice Select]]
+
+Double-click on the newly added slice block. There are multiple ways to select which bit(s) you want.  In this case, it is simplest to index from the upper end and select the first bit. If you wanted the [http://en.wikipedia.org/wiki/Least_significant_bit least significant bit] (lsb), you can also index from that position. You can either select the width and offset, or two bit locations.
+
+Set it for 1 bit wide with offset from top bit at zero.
+
+[[File:slice_params.png|500px|center|Slice Parameters]]
+
+=== Add a GPIO block ===
+(CASPER XPS library -> gpio).
+
+[[File:gpio_select.png|500px|center|GPIO Select]]
+
+Set it to use ROACH's LED bank as output, GPIO bit index 0 (the first LED).
+
+[[File:gpio_params.png|400px|center|GPIO Parameters]]
+
+=== Add a terminator ===
+To prevent warnings about unconnected outputs, terminate all unused outputs using a ''Terminator'':
+[[File:terminator_select.png|500px|center|Terminator Select]]
+
+Note that all blocks from the ''Simulink'' library (usually white), will not be compiled into hardware. They are present for simulation only and expect continuous signals, not discreet.
+
+Only Xilinx blocks (they are blue with Xilinx logo) will be compiled to hardware.
+
+For this reason, you need to use ''gateway'' blocks whenever connecting a Simulink-provided block (like a scope or constant) for simulations.  Some of the CASPER blocks (like the GPIO block) do this for you with ''sim_in'' and ''sim_out''. We will see later how to use a Simulink ''Scope'' - a software oscilliscope - to monitor these lines.
+
+=== Connect your design ===
+It is a good idea to rename your blocks to something more sensible, like counter_led instead of just counter. Do this simply by double-clicking on the name of the block and editing the text appropriately.
+
+[[File:gpio_circuit.png|600px|center|GPIO Circuit]]
+
+It is a good time to save this new design. There are some Matlab limitations you should be aware-of:
+ 
+'''Do not use spaces in your filenames''', or anywhere in the file path as it will break the toolflow.
+
+'''Total path length cannot be more than 64 characters'''. This refers to not only the file path, but also the path to '''any block within your design'''. For example, if you save this file to c:\projects\myfile.slx, the longest Matlab-indexed path would be c:\projects\myfile.slx\counter_led. While this is quite short, but there can be additional blocks hidden underneath some of your top level blocks. This is the case with GPIO, for example. This will become clearer later when we demonstrate the use of SubSystems. For now, try to keep your names short.
+
+Please save your design in your home directory.under /projects/<YOUR_INITIALS>_t1.slx (older versions of simulink will only have the .mdl extension, which is also fine to use). 
+
+=== Software control ===
+To demonstrate the use of software registers and control of the FPGA through the PPC, we will add a controllable counter to the above design. The counter can be started and stopped from software and also reset. We will be able to monitor the counter's current value too.
+
+By the end of this section, you will create a system that looks like this:
+
+[[File:slice_circuit.png|700px|center|Slice Circuit]]
+
+=== Add the software registers ===
+We need two software registers. One to control the counter, and a second one to read its current value. From the CASPER XPS System Blockset library, drag two Software Registers onto your design.
+
+[[File:SW_reg_select2.png|500px|center|Software Register Select]]
+
+Set the I/O direction to ''From Processor'' on the first one to enable dataflow from PowerPC to the FPGA fabric. Set it to ''To Processor'' on the second one.
+[[File:SW_reg_tab1.png|350px|center|Counter Control Tab 1]]
+[[File:SW_reg_tab2.png|350px|center|Counter Control Tab 2]]
+
+
+Rename the registers to something sensible, as these names are mapped to filenames in the PPC for controlling the design. Avoid using spaces, slashes and other funny characters in these names (spaces automatically get remapped to underscores anyway, but should be avoided for clarity). Perhaps ''counter_ctrl'' and ''counter_value'', to represent the control and output registers respectively.
+
+Also note that the software registers have ''sim_in'' and ''sim_out'' ports. The input port provides a means of simulating this register's value (as would be set by the PPC) using the sim_reg line. The output port provides a means to simulate this register's current FPGA-assigned value.
+
+For now, set the <i>sim_reg</i> port to constant one using a Simulink-type constant. This will enable the counter during simulations.
+
+[[File:constant_select.png|500px|center|Constant Select]]
+
+
+
+During simulation, we can monitor the counter's value using a scope:
+
+[[File:scope_select.png|500px|center|Scope Select]]
+
+=== Add the counter ===
+You can do this either by copying your existing counter block (copy-paste, or ctrl-click-drag-drop) or by placing a new one from the library.
+
+Configure it with a reset and enable port as follows:
+
+[[File:counter.png|400px|center|AddSub output]]
+
+=== Add the slice blocks ===
+Now we need some way to control the enable and reset ports of the counter. We could do this using two separate software registers, but this is wasteful since each register is 32 bits anyway.
+
+So we'll use a single register and slice out one bit for enabling the counter, and another bit for resetting it. Either copy your existing slice block (copy-paste it or hold ctrl while dragging/dropping it) or add two more from the library.
+
+The enable and reset ports of the counter require boolean values (which Simulink interprets differently from ordinary 1-bit unsigned numbers). Configure the slices as follows:
+
+Slice for enable:
+[[File:slice_en.png|500px|center|Slice Enable]]
+
+
+Slice for reset:
+[[File:slice_rst.png|500px|center|Slice Reset]]
+
+=== Connect it all up ===
+Now we need to connect all these blocks together. To neaten things up, consider resizing the slice blocks and hiding their names. Their function is clear enough from their icon without needing to see their names.
+
+Do so by right-clicking and selecting Format → Hide Name. You could do this with the counter too, but it's not a good idea with the software registers, because otherwise you wouldn't know how to address them when looking at your diagram.
+
+[[File:hide_name.png|700px|center|Hide Name Dialog]]
+
+== Adder ==
+
+To demonstrate some simple mathematical operations, we will create an adder. It will add two numbers on demand and output the result to another software register. Almost all astronomy DSP is done using fixed-point (integer) notation, and this adder will be no different.
+
+We will calculate a+b=sum_a_b.
+
+[[File:add_sub_circuit.png|700px|center|AddSub output]]
+
+=== Add the software registers ===
+
+Add two more input software registers. These will allow us to specify the two numbers to add. Add another output register for the sum output.
+
+Either copy your existing software register blocks (copy-paste or holding ctrl while dragging/dropping it) or add three more from the library.  Set the I/O direction to From Processor on the first two and set it to To Processor on the third one.
+
+=== Add the adder block ===
+
+Locate the adder/subtractor block, Xilinx Blockset -> Math -> AddSub and drag one onto your design. This block can optionally perform addition or subtraction. Let's leave it set at it's default, for addition.
+
+[[File:add_sub_basic.png|500px|center|AddSub output]]
+
+The output register is 32 bits. If we add two 32 bit numbers, we will have 33 bits.
+
+There are a number of ways of fixing this:
+
+* limit the input bitwidth(s) with slice blocks
+* limit the output bitwidth with slice blocks
+* create a 32 bit adder.
+
+Since you have already seen slice blocks demonstrated, let's try to set the AddSub block to
+be a 32 bit saturating adder. On the second tab, set it for user-defined precision, unsigned 32 bits.
+
+Also, under overflow, set it to saturate. Now if we add two very large numbers, it will simply return 2^32 -1.
+
+[[File:add_sub_output.png|500px|center|AddSub output]]
+
+=== Add the scope and simulation inputs ===
+Either copy your existing scope and simulation constants (copy-paste or ctrl-drag) or place a new one from the library as before. Set the values of the simulation inputs to anything you like.
+
+=== Connect it all together ===
+Like this:
+
+[[File:add_sub_circuit.png|700px|center|AddSub Circuit]]
+
+= Simulating =
+The design can be simulated with clock-for-clock accuracy directly from within Simulink. Set the number of clock cycles that you'd like to simulate and press the play button in the top toolbar.
+
+[[File:sim_params.png|800px|center|Simulation Parameters]]
+
+You can watch the simulation progress in the status bar in the bottom right. It will complete in the blink of an eye for this small design with just 10 clock cycles.
+
+You can double-click on the scopes to see what the signals look like on those lines. For example, the one connected to the counter should look like this:
+
+[[File:counter_sim.png|400px|center|Counter Simulation]]
+
+The one connected to your adder should return a constant, equal to the sum of the two numbers you entered. You might have to press the Autoscale button to scale the scope appropriately.
+
+[[File:adder_sim.png|800px|center|Adder Simulation]]
+
+Once you have verified that that design functions as you'd like, you're ready to compile for the FPGA...
+
+= Compiling =
+Essentially, you have constructed three completely separate little instruments. You have a flashing LED, a counter which you can start/stop/reset from software and also an adder. These components are all clocked off the same 100MHz system clock crystal, but they will operate independently.
+
+In order to compile this to an FPGA bitstream, type casper_xps on the Matlab command line.  This dialog box will pop up:
+
+[[File:bee_xps.png|500px|center|BEE XPS Popup]] 
+
+Leave all options on defaults. Ensure that the listed design is the one you want to compile (System Generator Design Name). If it is not, click anywhere on your design such that it is the highlighted window, then click gcs. To start the process, simply click Run XPS.
+
+
+Compile time is approximately 10 minutes. When complete, you should receive a popup box like this:
+
+[[File:run_successfully_completed.png|450px|center|Run Success]]
+
+= Programming the FPGA =
+There a three main ways to program the FPGA: BORPH, Telnet and Python, with details for each given below. BORPH allows you to interact with the FPGA by manipulating files directly from the ROACH board. KATCP allows you to manipulate these files over the network using simple telnet commands. The 'corr' package for python, created by the SA-SKA group, wraps the Telnet commands in python. The python method is probably the most commonly used in the CASPER community.
+
+= Transferring your design to the FPGA =
+To transfer your design to the FPGA see the General Roach Instructions document. For the Jodrell Bank workshop (2013) details are given in the python section.
+
+= Communicating directly using BORPH =
+
+== Programming the FPGA from BORPH ==
+To program the FPGA, simply execute it as you would any other linux program. Recall that the filesystem is mapped from the server and the BORPH files were in /boffiles/.
+
+Let's change to that directory now and see which files are available:
+
+<source lang="text">
+root@roach020112:~# cd /boffiles/
+root@roach020112:/boffiles# ls -al
+total 8196
+drwxrwxrwx  2 root root    4096 Aug 20  2009 .
+drwxr-xr-x 23 root root    4096 Feb  2  2009 ..
+-rwxr-xr-x  1 1000 1000 3894183 Aug 20  2009 das_blinken_lichte_2009_Feb_04_1837.bof
+-rw-r--r--  1 1001 1001 4468934 Aug 14  2009 tut1_2009_Aug_14_1140.bof
+root@roach020112:/boffiles#
+</source>
+
+We need to ensure that the file is marked as an executable, so that Linux is able to run it. You will notice that our tut1 file is not executable (look at the leftmost columns and see that there are no 'x's). Let's make it executable now:
+
+<source lang="text">
+root@roach020112:/boffiles# chmod a+x tut1_2009_Aug_14_1140.bof
+root@roach020112:/boffiles#
+</source>
+
+This will change permissions on the file, by adding executable permissions for everybody. Rechecking:
+
+<source lang="text">
+root@roach020112:/boffiles# ls -al
+total 8196
+drwxrwxrwx  2 root root    4096 Aug 20  2009 .
+drwxr-xr-x 23 root root    4096 Feb  2  2009 ..
+-rwxr-xr-x  1 1000 1000 3894183 Aug 20  2009 das_blinken_lichte_2009_Feb_04_1837.bof
+-rwxr-xr-x  1 1001 1001 4468934 Aug 14  2009 tut1_2009_Aug_14_1140.bof
+root@roach020112:/boffiles#
+</source>
+
+
+
+Now we are ready to execute it.
+
+<source lang="text">
+root@roach020112:/boffiles# ./tut1_2009_Aug_14_1140.bof
+</source>
+
+
+This will go'n program the FPGA, and you should notice that LED0 on the ROACH hardware is now blinking. However, we've lost our terminal, because the process has captured it. To keep the process running, but return the prompt to us, we can now choose to background the task (ctrl-z), or we can kill it (ctrl-c) and restart it with an amperstand, which will start it backgrounded.
+
+<source lang="text">
+root@roach020112:/boffiles# ./tut1_2009_Aug_14_1140.bof &
+[1] 323
+root@roach020112:/boffiles#
+</source>
+
+Our FPGA is now programmed (check for the flashing LED) and we have our prompt back!
+
+We can now see that a process in Linux has started...
+
+<source lang="text">
+root@roach020112:/boffiles# ps aux
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+</source>
+
+<i><snip></i>
+
+<source lang="text">
+root       284  0.1  0.0      0     0 ?        SN   07:36   0:00 [jffs2_gcd_mtd3]
+root       301  0.0  0.2   6700  1160 ?        Ss   07:36   0:00 /usr/sbin/sshd
+root       311  0.0  0.0    784   192 ?        S    07:36   0:00 tcpborphserver
+root       318  0.1  0.2   3772  1188 ttyS0    Ss   07:36   0:00 /bin/login --     
+root       319  0.1  0.3   3516  1796 ttyS0    S+   07:36   0:00 -bash
+root       323  0.0  0.0   1632   304 ttyS0    S    07:36   0:00 ./tut1_2009_Aug_14_1140.bof
+root       325  4.4  0.5  10000  2672 ?        Ss   07:36   0:00 sshd: root@pts/0
+root       328  0.8  0.3   3524  1800 pts/0    Ss   07:36   0:00 -bash
+root       332  0.0  0.1   2780   996 pts/0    R+   07:37   0:00 ps aux
+root@roach020112:/boffiles#
+</source>
+
+Notice that PID 323 (yours may be different) is our process. We can now navigate to the proc directory which contains our software registers.
+
+<source lang="text">
+root@roach020112:/boffiles# cd /proc/323/hw/ioreg/
+root@roach020112:/proc/323/hw/ioreg# ls -al
+total 0
+dr-xr-xr-x 2 root root 0 Aug 21 08:00 .
+drwxr-xr-x 2 root root 0 Aug 21 08:00 ..
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 a
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 b
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 counter_ctrl
+-r--r--r-- 1 root root 4 Aug 21 08:00 counter_value
+-r--r--r-- 1 root root 4 Aug 21 08:00 sum_a_b
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 sys_board_id
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 sys_clkcounter
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 sys_rev
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 sys_rev_rcs
+-rw-rw-rw- 1 root root 4 Aug 21 08:00 sys_scratchpad
+root@roach020112:/proc/323/hw/ioreg#
+</source>
+
+Now you can see all our software registers. We have a, b, counter_ctrl, counter_value and sum_a_b as expect. However, in addition, the toolflow has automatically added a few other registers.
+
+sys_board_id is simply a constant which allows software to identify what hardware platform is running. For ROACH, this is a constant 0xb00b001.
+
+sys_clkcounter is a 32-bit counter that increments automatically on every FPGA clock tick. This allows software to estimate the FPGA's clock rate. Useful for debugging boards with bad clock inputs.
+
+sys_rev is not yet implemented, but will eventually indicate the revision of the software toolchain that was used to compile the design
+
+sys_rcs is also not yet implemented, but will eventually indicate the SVN revision of the CASPER library that was used to compile your design.
+
+
+sys_scratchpad is simply a read/write software register where you can write a register and read it back again as a sanity check.
+
+
+== Communicating with your FPGA process in BORPH ==
+The registers contain binary data. To read and represent these on our text-based terminal, we will use a Linux utility called hexdump, which simply prints out the ASCII representation of hex values (base-16) in binary files. To write into these files, we'll use Linux's echo utility. Echo does not support writing hex values, but does support octal (base-8).
+
+Let's start by having a look at our counter value. Since we haven't started it yet, we expect it to be zero.
+
+<source lang="text">
+root@roach020112:/proc/323/hw/ioreg# hd counter_value
+00000000  00 00 00 00                                       |....|
+00000004
+root@roach020112:/proc/323/hw/ioreg#
+</source>
+
+We notice that the register is indeed 32 bits long and that it contains the value zero. The column on the left tells us the memory addresses, while the four space separated values on the right give us the 4 byte (32 bit) value of the software register in hexadecimal. Right now, both registers report all zeros. According to our Simulink design, we can disable or enable the counter by setting cnt_en to 0 or 1 respectively.
+
+Let's now start the counter and watch it increment.
+
+<source lang="text">
+root@roach020112:/proc/323/hw/ioreg# echo -n -e "\000\000\000\001" > counter_ctrl
+</source>
+
+Here we have told echo not to append a newline character to the end of the line (-n), and told it to interpret  the incoming string's escape characters (\0 specifies octal values). Then we pipe it's output into counter_ctrl. Now let's relook at the counter value...
+
+<source lang="text">
+root@roach020112:/proc/323/hw/ioreg# hd counter_value
+00000000  da 12 42 de                                       |..B.|
+00000004
+root@roach020112:/proc/323/hw/ioreg# hd counter_value
+00000000  dd 32 7c 3c                                       |.2|<|
+00000004
+</source>
+
+You can see that the counter is indeed incrementing, and that it is happening very quickly (remember that it's incrementing by 100 million every second, since the FPGA is running at 100MHz).
+
+0xda1242de =   14291522 in decimal.
+0xdd327c3c = 3711073340 in decimal.
+
+You should see the register values increasing until they reach 2^32-1 and then repeat.  Resetting the counter has the desired effect...
+
+<source lang="text">
+root@roach020112:/proc/323/hw/ioreg# echo -n -e "\000\000\000\002" > counter_ctrl
+root@roach020112:/proc/323/hw/ioreg# hd counter_value
+00000000  00 00 00 00                                       |....|
+00000004
+root@roach020112:/proc/323/hw/ioreg#
+</source>
+
+For you to try: what happens if you try to reset and enable the counter at the same time? Try it in simulation and on the hardware. Do they do the same thing? Is this what you expect?
+
+
+Let's now consider our adder: All registers initialise to zero upon startup, so we'd expect a and b to be zero now.
+
+<source lang="text">
+root@roach020112:/proc/323/hw/ioreg# hd a
+00000000  00 00 00 00                                       |....|
+00000004
+root@roach020112:/proc/323/hw/ioreg# hd b
+00000000  00 00 00 00                                       |....|
+00000004
+</source>
+
+Indeed, this is the case. Let's write something in there now and have a look at the output. Let's add 5 and 12, so we expect 17.
+
+We use 0x to indicate hex, 0o for octal and 0b for binary. No prefix indicates decimal.
+
+05 = 0o05 = 0x05
+12 = 0o14 = 0x0c
+17 = 0o21 = 0x11
+
+<source lang="text">
+root@roach020112:/proc/323/hw/ioreg# echo -n -e "\000\000\000\005" > a
+root@roach020112:/proc/323/hw/ioreg# echo -n -e "\000\000\000\014" > b
+root@roach020112:/proc/323/hw/ioreg# hd a
+00000000  00 00 00 05                                       |....|
+00000004
+root@roach020112:/proc/323/hw/ioreg# hd b
+00000000  00 00 00 0c                                       |....|
+00000004
+root@roach020112:/proc/323/hw/ioreg# hd sum_a_b
+00000000  00 00 00 11                                       |....|
+00000004
+root@roach020112:/proc/323/hw/ioreg#
+</source>
+
+Great! Exactly as expected.
+
+
+For you to try: What happens if you try to add two very large numbers (try to make the 32-bit register overflow).
+
+This shows you a basic view of BORPH and interfacing to the proc files directly from the ROACH using Linux utilities. This method of accessing the shared memory and registers is good for quick verification that your design is running and loaded correctly, but for more advanced command, control and data acquisition, we recommend using the tcpborphserver and KATCP that starts up automatically when booting ROACH.
+= Interacting using KATCP =
+[[KATCP]] is a process running on the [[ROACH]] boards which listens for TCP connections on port 7147 (tcpborphserver). It talks using machine-parseable ASCII text strings. It was designed this way so that it is easy to debug by watching the exchange of network traffic, whilst still being easy to program clients and servers.
+== Connecting to your ROACH ==
+Telnet allows you to connect directly to an open TCP port. Let's connect to ROACH's KATCP port now.
+
+Telnet roach <ROACH2 IP ADDRESS> 7147
+
+You will be greeted with the KATCP welcome header.
+
+<source lang="text">
+#version tcpborphserver-1.0
+#build-state tcpborphserver-0.
+#log info 1250851713365 tcpborphserver new\_connection\_192.168.14.1:53088\_to\_192.168.14.112:7147
+</source>
+
+From here you can type [[KATCP]] commands. A full list, reference guide and specification sheet can be found here: [[KATCP]].
+
+To summarize:
+All commands must be preceded by a ?, and submitted with a CR or LF.
+All commands will be acknowledged with a response, preceded by a !.
+Multi-line responses will be preceded by a # on each line, followed by the standard acknowledge response.
+Spaces are considered argument delimiters. Arguments with spaces are escaped using \_.
+
+Let's look at some examples:
+
+To get online help and see a list of commands available, type ?help and press enter.
+
+<source lang="text">
+?help
+#help tap-stop stop\_the\_tap\_server\_(?tap-stop)
+#help tap-start start\_the\_tap\_server\_(?tap-start\_10gbe-register-name...
+#help echotest basic\_network\_echo\_tester\_(?echotest\_ip-address\_ip-p...
+#help wordwrite writes\_data\_words\_to\_a\_named\_register
+#help indexwrite writes\_arbitrary\_data\_lengths\_to\_a\_numbered\_register
+#help write writes\_arbitrary\_data\_lengths\_to\_a\_named\_regi...
+#help wordread reads\_data\_words\_from\_named\_a\_register
+</source>
+
+<source lang="text">
+#help indexread reads\_arbitrary\_data\_lengths\_from\_a\_numbered\_register
+#help read reads\_arg3\_bytes\_starting\_at\_arg2\_offset\_from\_register\_arg1\...
+#help listdev displays\_available\_device\_registers
+#help listcmd displays\_available\_shell\_commands
+#help listbof displays\_available\_images
+#help status displays\_image\_status\_information
+#help progdev programs\_an\_image\_(?progdev\_[boffile])
+#help sensor-sampling sets\_the\_sensor\_reporting\_mode
+#help sensor-list lists\_available\_sensors
+#help watchdog pings\_the\_system
+#help log-level sets\_the\_minimum\_reported\_log\_priority
+#help help displays\_this\_help
+#help restart restarts\_the\_system
+#help halt shuts\_the\_system\_down
+!help ok 21
+</source>
+
+Here you can see what a multiline response looks like. Although a little hard to read by us humans, this is easy to parse by a machine. We have clients available for decoding this text and constructing commands automatically. They will be demonstrated in Tutorial 2. For now, let's look at constructing some commands by hand.
+
+To get a list of bof files available, type ?listbof.
+
+<source lang="text">
+?listbof
+#listbof das_blinken_lichte_2009_Feb_04_1837.bof
+#listbof tut1_2009_Aug_14_1140.bof
+!listbof ok
+</source>
+
+To program the FPGA with one of these bitstreams, type ?progdev <my_boffile>.
+
+<source lang="text">
+?progdev tut1_2009_Aug_14_1140.bof
+!progdev ok
+</source>
+
+You will notice that commands are ignored if you don't include the ? in the front.
+
+To list the registers available to you, type ?listdev.
+
+<source lang="text">
+!progdev ok
+?listdev
+#listdev sum_a_b
+#listdev counter_value
+#listdev counter_ctrl
+#listdev b
+#listdev a
+#listdev sys_clkfreq
+#listdev sys_clkcounter
+#listdev sys_scratchpad
+#listdev sys_rev_rcs
+#listdev sys_rev
+#listdev sys_board_id
+!listdev ok
+</source>
+
+Here you can see we have the same list as we had before in BORPH.
+
+
+
+
+
+Normally, machines using this interface would read and write to these registers using raw binary numbers using the read or write commands. For manual interaction, there are wordwrite and wordread commands which do the same with ASCII hex representations of 32-bit values. Let's try and add two numbers together now.
+
+<source lang="text">
+?wordwrite a 0 0x02
+!wordwrite ok
+?wordwrite b 0 0x07
+!wordwrite ok
+?wordread sum_a_b 0
+!wordread ok 0x9
+</source>
+
+You may be wondering what the extra zero in the arguments is for. This is the index offset. It is used when writing to blocks of memory, rather than software registers. For example, if you wanted to write a single 32 bit number into a 1GB DRAM memory chunk, at address 0x12808, you would say: 
+
+<source lang="text">
+?wordwrite <my_dram> 0x12808 <my_value>
+</source>
+
+As you can see, the same FPGA functions that are available in [[BORPH]] are accessible through [[KATCP]], with the difference that it can be configured remotely over a TCP network stream.
+
+= Introduction to Python library for use with KATCP server =
+
+An alternative method of programming your FPGA is using the python interface for the KATCP server.
+
+=== Getting the required packages ===
+
+These are pre-installed on the server in the workshop and you do not need to do any further configuration. Python and C APIs are available for connecting to KATCP servers. A further Python wrapper is available for simplifying communications with the KATCP server on ROACH. The KATCP package is available from the Python Package Index (PyPI) here: http://pypi.python.org/pypi/katcp and the wrapper is bundled in the CASPER general-purpose control framework for ROACH-based instruments, casperfpga.
+
+=== Move your .bof file to your NFS server ===
+
+On successful compilation of your simulink model, a .bof file will be created in your_model_name/bit_files/ . SCP this to the boffiles folder on your NFS server. For the Jodrell Bank workshop (2013) this is done by
+ scp path/to/your/modelfolder/your_model_name/bitfiles/your_boffile.bof casper@brutus:/srv/roach_boot/etch/boffiles/
+
+where brutus is the workshop's NFS server.
+
+=== Connecting to the board ===
+
+Start interactive python by running
+ ipython
+
+Now import the correlator control library. This will automatically pull-in the KATCP library and any other required communications libraries.
+ import casperfpga
+
+To connect to the roach board, we define a new object. Let's call it fpga. The wrapper's fpgaclient initiator requires two arguments, the IP address or hostname of the roach board, and the KATCP port. KATCP defaults to port 7147.
+
+ fpga=corr.katcp_wrapper.FpgaClient('roachname',7147)
+
+The first thing we do is configure the FPGA.
+
+ fpga.progdev('your_boffile.bof')
+
+= Conclusion =
+This concludes Tutorial 1. You have learned how to constuct a simple Simulink design, transfer the files to a [[ROACH]] board and interact with it using [[BORPH]] and [[KATCP]].
+
+In Tutorial 2, you will learn how to use 10 GbE network interfaces with CASPER boards and to interact with your design using the [[KATCP#Clients_and_servers | KATCP Python client]].
+
+</div>
