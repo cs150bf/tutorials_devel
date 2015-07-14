@@ -1,38 +1,36 @@
 #!/bin/env ipython
 
 '''
-This script demonstrates programming an FPGA, configuring 10GbE cores and checking transmitted and received data using the Python KATCP library along with the katcp_wrapper distributed in the corr package. Designed for use with TUT3 at the 2009 CASPER workshop.
+This script demonstrates programming an FPGA, configuring 10GbE cores and checking transmitted and received data using the Python KATCP library along with the katcp_wrapper distributed in the casperfpga package.
 \n\n 
 Author: Jason Manley, August 2009.
-Updated for CASPER 2013 workshop. This tut needs a rework to use new snap blocks and auto bit unpack.
+Updated by: Tyrone van Balla, July 2015
+Updated for CASPER 2016 workshop. Updated to use casperfpga library and for ROACH-2
 '''
-import corr, time, struct, sys, logging, socket
+import corr, casperfpga, time, struct, sys, logging, socket
 
 #Decide where we're going to send the data, and from which addresses:
-dest_ip  =192*(2**24) + 168*(2**16) + 3*(2**8) + 16
-fabric_port=60000         
-source_ip= 192*(2**24) + 168*(2**16) + 3*(2**8) + 13
-mac_base=(2<<40) + (2<<32)
+# should match addresses specified in gbe blocks in simulink model
+dest_ip  =192*(2**24) + 168*(2**16) + 5*(2**8) + 16
+fabric_port=10000         
+source_ip= 192*(2**24) + 168*(2**16) + 5*(2**8) + 20
+mac_base=20015998304256
 
 pkt_period = 16384  #how often to send another packet in FPGA clocks (200MHz)
 payload_len = 128   #how big to make each packet in 64bit words
 
 brams=['bram_msb','bram_lsb','bram_oob']
 tx_snap = 'snap_gbe0_tx'
-rx_snap = 'snap_gbe3_rx'
+rx_snap = 'snap_gbe1_rx'
 
 tx_core_name = 'gbe0'
-rx_core_name = 'gbe3'
+rx_core_name = 'gbe1'
 
-boffile = 'tut2.bof'
-fpga=[]
+fpgfile = 'tut2.fpg'
+fpgas=[]
 
 def exit_fail():
     print 'FAILURE DETECTED. Log entries:\n',lh.printMessages()
-#    try:
-#        fpga.stop()
-#    except: pass
-#    raise
     exit()
 
 def exit_clean():
@@ -55,8 +53,8 @@ if __name__ == '__main__':
         help='Plot the TX and RX counters. Needs matplotlib/pylab.')  
     p.add_option('-a', '--arp', dest='arp', action='store_true',
         help='Print the ARP table and other interesting bits.')  
-    p.add_option('-b', '--boffile', dest='bof', type='str', default=boffile,
-        help='Specify the bof file to load')  
+    p.add_option('-f', '--fpgfile', dest='fpg', type='str', default=fpgfile,
+        help='Specify the fpg file to load')  
     opts, args = p.parse_args(sys.argv[1:])
 
     if args==[]:
@@ -64,8 +62,8 @@ if __name__ == '__main__':
         exit()
     else:
         roach = args[0]
-    if opts.bof != '':
-        boffile = opts.bof
+    if opts.fpg != '':
+        fpgfile = opts.fpg
 try:
     lh = corr.log_handlers.DebugLogHandler()
     logger = logging.getLogger(roach)
@@ -73,7 +71,7 @@ try:
     logger.setLevel(10)
 
     print('Connecting to server %s... '%(roach)),
-    fpga = corr.katcp_wrapper.FpgaClient(roach, logger=logger)
+    fpga = casperfpga.katcp_fpga.KatcpFpga(roach)
     time.sleep(1)
 
     if fpga.is_connected():
@@ -86,7 +84,7 @@ try:
         print '------------------------'
         print 'Programming FPGA...',
         sys.stdout.flush()
-        fpga.progdev(boffile)
+        fpga.upload_to_ram_and_program(fpgfile)
         time.sleep(10)
         print 'ok'
 
@@ -102,24 +100,24 @@ try:
     gbe0_link=bool(fpga.read_int('gbe0_linkup'))
     print gbe0_link
     if not gbe0_link:
-        print 'There is no cable plugged into port0. Please plug a cable between ports 0 and 3 to continue demo. Exiting.'
+        print 'There is no cable plugged into port0. Please plug a cable between ports 0 and 1 to continue demo. Exiting.'
         exit_clean()
-    print 'Port 3 linkup: ',
+    print 'Port 1 linkup: ',
     sys.stdout.flush()
-    gbe3_link=bool(fpga.read_int('gbe3_linkup'))
-    print gbe3_link
-    if not gbe0_link:
-        print 'There is no cable plugged into port3. Please plug a cable between ports 0 and 3 to continue demo. Exiting.'
+    gbe1_link=bool(fpga.read_int('gbe1_linkup'))
+    print gbe1_link
+    if not gbe1_link:
+        print 'There is no cable plugged into port1. Please plug a cable between ports 0 and 1 to continue demo. Exiting.'
         exit_clean()
 
     print '---------------------------'
     print 'Configuring receiver core...',
     sys.stdout.flush()
-    fpga.tap_start('tap0',rx_core_name,mac_base+dest_ip,dest_ip,fabric_port)
+    fpga.tengbes.gbe0.tap_start(restart=False)
     print 'done'
     print 'Configuring transmitter core...',
     sys.stdout.flush()
-    fpga.tap_start('tap3',tx_core_name,mac_base+source_ip,source_ip,fabric_port)
+    fpga.tengbes.gbe1.tap_start(restart=False)
     print 'done'
 
     print '---------------------------'
@@ -148,15 +146,15 @@ try:
         print '10GbE Transmitter core details:'
         print '==============================='
         print "Note that for some IP address values, only the lower 8 bits are valid!"
-        fpga.print_10gbe_core_details(tx_core_name,arp=True)
+        fpga.tengbes.gbe0.print_10gbe_core_details(arp=True)
         print '\n\n============================'
         print '10GbE Receiver core details:'
         print '============================'
         print "Note that for some IP address values, only the lower 8 bits are valid!"
-        fpga.print_10gbe_core_details(rx_core_name,arp=True)
+        fpga.tengbes.gbe1.print_10gbe_core_details(arp=True)
 
     print 'Sent %i packets already.'%fpga.read_int('gbe0_tx_cnt')
-    print 'Received %i packets already.'%fpga.read_int('gbe3_rx_frame_cnt')
+    print 'Received %i packets already.'%fpga.read_int('gbe1_rx_frame_cnt')
 
     print '------------------------'
     print 'Triggering snap captures...',
@@ -202,14 +200,15 @@ try:
 
     print 'Unpacking TX packet stream...'
     tx_data=[]
+    ip_mask = (2**(24+5)) -(2**5) # beacuse bram_oob is 32bits, and some bits are required for other information, we can only reliably get the 3 lower bytes of the IP address
     for i in range(0,tx_size):
         data_64bit = struct.unpack('>Q',tx_bram_dmp['bram_msb'][(4*i):(4*i)+4]+tx_bram_dmp['bram_lsb'][(4*i):(4*i)+4])[0]
         tx_data.append(data_64bit)
         if not opts.silent:
             oob_32bit = struct.unpack('>L',tx_bram_dmp['bram_oob'][(4*i):(4*i)+4])[0]
             print '[%4i]: data: 0x%016X'%(i,data_64bit),
-            ip_mask = (2**(8+5)) -(2**5)
-            print 'IP: 0.0.0.%03d'%((oob_32bit&(ip_mask))>>5),
+            ip_string = socket.inet_ntoa(struct.pack('>L',(oob_32bit&(ip_mask))>>5))            
+            print 'Dest IP: %s'%(ip_string),
             if oob_32bit&(2**0): print '[TX overflow]',
             if oob_32bit&(2**1): print '[TX almost full]',
             if oob_32bit&(2**2): print '[tx_active]',
