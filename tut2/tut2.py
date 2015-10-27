@@ -1,4 +1,4 @@
-#!/bin/env ipython
+#!/usr/bin/env python
 
 '''
 This script demonstrates programming an FPGA, configuring 10GbE cores and checking transmitted and received data using the Python KATCP library along with the katcp_wrapper distributed in the casperfpga package.

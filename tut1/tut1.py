@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Python script for Casper Tutorial 1
 Author: Tyrone van Balla (SKA Africa), July 2015
