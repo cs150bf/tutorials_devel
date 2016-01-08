@@ -1,11 +1,8 @@
 #!/usr/bin/env python
-<<<<<<< HEAD
-
-=======
->>>>>>> 227b7d107a8ce05d7c10f6f3b5a8638ed5a8899a
 '''
 Python script for Casper Tutorial 1
 Author: Tyrone van Balla (SKA Africa), July 2015
+Updated: tvb, January 2016 - added optional IPython Session
 Updated for 2016 CASPER Workshop. Updated Tutorial 1 for use on ROACH2 and to use casperfpga library
 '''
 
@@ -34,7 +31,8 @@ if __name__ == '__main__':
     parser.add_argument("roach", help="<ROACH_HOSTNAME_or_IP>")
     parser.add_argument("-f", "--fpgfile", help="Specify bitstream to load", type=str, default=fpgfile)
     parser.add_argument("-n", "--noadd", help="disable adder testing", action="store_true")    
-    
+    parser.add_argument("-i", "--ipy", help="Enable IPython Session for control", action="store_true")
+
     args = parser.parse_args()
 
     if args.roach=='':
@@ -64,6 +62,17 @@ sys.stdout.flush()
 fpga.upload_to_ram_and_program(fpgfile)
 time.sleep(10)
 print 'ok'
+
+if (args.ipy):
+    print '---------------------------'
+    print 'Opening IPython Session . . . '
+    time.sleep(1)
+
+    import IPython; IPython.embed()
+    
+    print 'Done. Exiting . . . '
+    time.sleep(1)
+    exit_clean()
 
 if (not args.noadd):
     # get variables to assign to registers to be used in adder
