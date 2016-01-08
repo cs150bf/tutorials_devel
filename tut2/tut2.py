@@ -4,13 +4,18 @@
 This script demonstrates programming an FPGA, configuring 10GbE cores and checking transmitted and received data using the Python KATCP library along with the katcp_wrapper distributed in the casperfpga package.
 \n\n 
 Author: Jason Manley, August 2009.
-Updated by: Tyrone van Balla, July 2015
+Updated by: Tyrone van Balla, December 2015
 Updated for CASPER 2016 workshop. Updated to use casperfpga library and for ROACH-2
 '''
-import casperfpga, time, struct, sys, logging, socket
+import casperfpga
+import time
+import struct
+import sys
+import logging
+import socket
 
 #Decide where we're going to send the data, and from which addresses:
-# should match addresses specified in gbe blocks in simulink model
+# IP addr, ports & macs should match addresses specified in gbe blocks in simulink model
 dest_ip  =192*(2**24) + 168*(2**16) + 5*(2**8) + 16
 fabric_port=10000         
 source_ip= 192*(2**24) + 168*(2**16) + 5*(2**8) + 20
@@ -79,30 +84,26 @@ class DebugLogHandler(logging.Handler):
                     print '%s: %s'%(i.name,i.msg)
 
 if __name__ == '__main__':
-    from optparse import OptionParser
+    import argparse
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("roach", help="<ROACH_HOSTNAME or IP>")
+    parser.add_argument("--noprogram", action='store_true', help="Don't program the fpga")
+    parser.add_argument("-s", "--silent", action='store_true', help="Don't print the contents of the packets")
+    parser.add_argument("-p", "--plot", action='store_true', help="Plot the TX and RX counters. Requires matplotlib/pylab")
+    parser.add_argument("-a", "--arp", action='store_true', help="Print the ARP table and other info")
+    parser.add_argument("-f", "--fpgfile", type=str, default=fpgfile, help="Specify the fpg file to load")
 
-    p = OptionParser()
-    p.set_usage('tut2.py <ROACH_HOSTNAME_or_IP> [options]')
-    p.set_description(__doc__)
-    p.add_option('', '--noprogram', dest='noprogram', action='store_true',
-        help='Don\'t print the contents of the packets.')  
-    p.add_option('-s', '--silent', dest='silent', action='store_true',
-        help='Don\'t print the contents of the packets.')  
-    p.add_option('-p', '--plot', dest='plot', action='store_true',
-        help='Plot the TX and RX counters. Needs matplotlib/pylab.')  
-    p.add_option('-a', '--arp', dest='arp', action='store_true',
-        help='Print the ARP table and other interesting bits.')  
-    p.add_option('-f', '--fpgfile', dest='fpg', type='str', default=fpgfile,
-        help='Specify the fpg file to load')  
-    opts, args = p.parse_args(sys.argv[1:])
+    args = parser.parse_args()
 
-    if args==[]:
+    if args.roach=="":
         print 'Please specify a ROACH board. \nExiting.'
         exit()
     else:
-        roach = args[0]
-    if opts.fpg != '':
-        fpgfile = opts.fpg
+        roach = args.roach
+
+    if args.fpgfile != '':
+        fpgfile = args.fpgfile
 try:
     lh = DebugLogHandler()
     logger = logging.getLogger(roach)
@@ -119,7 +120,7 @@ try:
         print 'ERROR connecting to server %s.\n'%(roach)
         exit_fail()
     
-    if not opts.noprogram:
+    if not args.noprogram:
         print '------------------------'
         print 'Programming FPGA...',
         sys.stdout.flush()
@@ -180,7 +181,7 @@ try:
 
     time.sleep(2)
 
-    if opts.arp:
+    if args.arp:
         print '\n\n==============================='
         print '10GbE Transmitter core details:'
         print '==============================='
@@ -243,7 +244,7 @@ try:
     for i in range(0,tx_size):
         data_64bit = struct.unpack('>Q',tx_bram_dmp['bram_msb'][(4*i):(4*i)+4]+tx_bram_dmp['bram_lsb'][(4*i):(4*i)+4])[0]
         tx_data.append(data_64bit)
-        if not opts.silent:
+        if not args.silent:
             oob_32bit = struct.unpack('>L',tx_bram_dmp['bram_oob'][(4*i):(4*i)+4])[0]
             print '[%4i]: data: 0x%016X'%(i,data_64bit),
             ip_string = socket.inet_ntoa(struct.pack('>L',(oob_32bit&(ip_mask))>>5))            
@@ -261,7 +262,7 @@ try:
     for i in range(0,rx_size):
         data_64bit = struct.unpack('>Q',rx_bram_dmp['bram_msb'][(4*i):(4*i)+4]+rx_bram_dmp['bram_lsb'][(4*i):(4*i)+4])[0]
         rx_data.append(data_64bit)
-        if not opts.silent:
+        if not args.silent:
             oob_32bit = struct.unpack('>L',rx_bram_dmp['bram_oob'][(4*i):(4*i)+4])[0]
             print '[%4i]: data: 0x%016X'%(i,data_64bit),
             ip_string = socket.inet_ntoa(struct.pack('>L',(oob_32bit&(ip_mask))>>5))
@@ -288,7 +289,7 @@ try:
 
     print '=========================='
 
-    if opts.plot:   
+    if args.plot:   
         import pylab
         pylab.subplot(211)
         pylab.plot(tx_data, label='TX data')
@@ -305,4 +306,3 @@ except Exception as inst:
     exit_fail()
 
 exit_clean()
-
