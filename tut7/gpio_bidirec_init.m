@@ -1,4 +1,4 @@
-function gpio_bidir_init(cursys)
+function gpio_bidirec_init(cursys)
 
 % We need to rename the gateway blocks in the yellow block
 % so that they respect the heirarchical naming conventions

@@ -20,7 +20,7 @@
 %                                                                             %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function b = xps_gpio(blk_obj)
+function b = xps_gpio_bidirec(blk_obj)
 
 %Is the block under consideration tagged as an xps block?
 if ~isa(blk_obj,'xps_block')
@@ -28,7 +28,7 @@ if ~isa(blk_obj,'xps_block')
 end
 
 % Is the block under consideration a gpio_bidir block? 
-if ~strcmp(get(blk_obj,'type'),'xps_gpio_bidir')
+if ~strcmp(get(blk_obj,'type'),'xps_gpio_bidirec')
     error(['Wrong XPS block type: ',get(blk_obj,'type')]);
 end
 
@@ -39,16 +39,18 @@ blk_name = get(blk_obj,'simulink_name');
 %Get the hardware platform (i.e. ROACH board, etc, and GPIO bank used by the block
 xsg_obj = get(blk_obj,'xsg_obj');
 hw_sys_full =  get(xsg_obj,'hw_sys');
-hw_sys = strtok(hw_sys_full,':') %hw_sys_full is ROACH:SX95t (We only want "ROACH")
-gpio_bank = get_param(blk_name,'bank')
+[s.hw_sys,s.io_group] = xps_get_hw_info(get_param(blk_name, 'bank'));
+
+%hw_sys = strtok(hw_sys_full,':') %hw_sys_full is ROACH:SX95t (We only want "ROACH")
+%gpio_bank = get_param(blk_name,'bank')
 
 %set the properties of the XSG object
-s.hw_sys = hw_sys
-s.io_group= gpio_bank
+%s.hw_sys = hw_sys
+%s.io_group= gpio_bank
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %constructor
-b = class(s,'xps_gpio_bidir',blk_obj);
+b = class(s,'xps_gpio_bidirec',blk_obj);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -56,7 +58,7 @@ b = class(s,'xps_gpio_bidir',blk_obj);
 
 % ip name
 %The is the name of your pcore which will be instantiated when the toolflow sees the yellow block
-b = set(b, 'ip_name','gpio_bidir');
+b = set(b, 'ip_name','gpio_bidirec');
 
 % external ports
 % Here we set up the external (i.e. to FPGA pin) connections required by the yellow block pcore
@@ -70,7 +72,15 @@ switch s.hw_sys
             iostandard = 'LVCMOS15';
           otherwise
             iostandard = 'LVCMOS25';
-        end               
+        end
+
+    case 'ROACH2'
+    	switch s.io_group
+    	  case 'gpio'
+  	    iostandard = 'LVCMOS15';
+    	  case 'led'
+  	    iostandard = 'LVCMOS15';
+    end
     % you might like to insert conditions here for other platforms
     otherwise
         iostandard = 'LVCMOS25';

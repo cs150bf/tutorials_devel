@@ -1,68 +1,173 @@
-import corr
+#!/usr/bin/env python
+
+'''
+Script for testing the Bi-Directional GPIO Yellow Block created for CASPER Tutorial 7.
+\n\n\
+Author: Tyrone van Balla, January 2016
+'''
+
+import casperfpga
 import time
+import sys
 import numpy as np
 
-r = corr.katcp_wrapper.FpgaClient('chewie')
-time.sleep(0.5)
-r.progdev('tut7.bof')
+fpgfile = 'tut7.fpg'
+fpgas = []
 
-r.write_int('a_is_input',1)
-r.write_int('b_is_input',1)
+def exit_clean():
+    try:
+        for f in fpgas: f.stop()
+    except:
+        pass
+    exit()
 
-print "configuring to send from GPIO_B to GPIO_A"
-print ""
-r.write_int('a_is_input',1)
-r.write_int('b_is_input',0)
+def exit_fail():
+    print 'FAILURE DETECTED. Exiting . . .'
+    exit()
 
-r.write_int('to_gpio_a',0)
-r.write_int('to_gpio_b',0xffffffff)
-time.sleep(0.01)
+if __name__ == '__main__':
+    import argparse
 
-print 'A: 0 <------- B : 0xff'
+    parser = argparse.ArgumentParser()
+    parser.add_argument("roach", help="<ROACH_HOSTNAME or IP>")
+    parser.add_argument("-f", "--fpgfile", type=str, default=fpgfile, help="Specify the fpg file to load")
+    parser.add_argument("-i", "--ipython", action='store_true', help="Enable iPython control")
 
-from_a = r.read_int('from_gpio_a')
-from_b = r.read_int('from_gpio_b')
+    args = parser.parse_args()
 
-print "Readback values: A: %s, B: %s " %(np.binary_repr(from_a,width=8),np.binary_repr(from_b,width=8))
+    if args.roach == "":
+        print 'Please specify a ROACH board. \nExiting'
+        exit()
+    else:
+        roach = args.roach
 
-print 'A: 0xff <------- B: 0x0'
+    if args.fpgfile != '':
+        fpgfile = args.fpgfile
 
-r.write_int('to_gpio_a',0xffffffff)
-r.write_int('to_gpio_b',0)
-time.sleep(0.01)
+try:
 
-from_a = r.read_int('from_gpio_a')
-from_b = r.read_int('from_gpio_b')
+    print "Connecting to server %s . . . "%(roach),
+    fpga = casperfpga.katcp_fpga.KatcpFpga(roach)
+    time.sleep(1)
 
-print "Readback values: A: %s, B: %s " %(np.binary_repr(from_a,width=8),np.binary_repr(from_b,width=8))
+    if fpga.is_connected():
+        print 'ok\n'
+    else:
+        print 'ERROR connecting to server %s . . .'%(roach)
+        exit_fail()
 
+    # program fpga with bitstream
 
-print ""
-print "configuring to send from GPIO_A to GPIO_B"
-print ""
+    print '------------------------'
+    print 'Programming FPGA...',
+    sys.stdout.flush()
+    fpga.upload_to_ram_and_program(fpgfile)
+    time.sleep(10)
+    print 'ok'
+    
+    # intialize gpio bank control registers
+    fpga.write_int('g_is_input', 1)
+    fpga.write_int('l_is_input', 1)
 
-r.write_int('b_is_input',1)
-r.write_int('a_is_input',0)
+    if args.ipython:
+        # open ipython session for manual testing of yellow block
+        
+        # list all registers first
+        print '\nAvailable Registers:'
+        registers = fpga.listdev()
+        for reg in registers:
+            if not('sys' in reg):
+                print '\t',
+                print reg
+            else:
+                pass
+        print '\n'
 
-r.write_int('to_gpio_a',0)
-r.write_int('to_gpio_b',0xff)
-time.sleep(0.01)
+        # how to use
+        print 'Use "fpga" as the fpga object\n'
 
-print 'A: 0 -------> B: 0xff'
+        import IPython; IPython.embed()
+        
+        print 'Exiting . . .'
+        exit_clean()
+    
+    '''
+    Automated testing of Bidirectional GPIO Block.
+    Sets one GPIO bank as output, other as input.
+    Writes to output bank, reads input.
 
-from_a = r.read_int('from_gpio_a')
-from_b = r.read_int('from_gpio_b')
+    Swaps mode of banks to demonstrate either bank can be either input or output.
 
-print "Readback values: A: %s, B: %s " %(np.binary_repr(from_a,width=8),np.binary_repr(from_b,width=8))
+    '''
+    
+    print '#################################'
+    # Send from GPIO_LED (B) to GPIO_GPIO (A) 
+    print '\nConfiguring to send from GPIO_LED (B) to GPIO_GPIO (A)\n'
+    fpga.write_int('g_is_input', 1) # GPIO_GPIO as input
+    fpga.write_int('l_is_input', 0) # GPIO_LED as output
+    
+    print 'Initial Values: A: %s, B: %s\n' % (np.binary_repr(fpga.read_int('from_gpio_g'), width=8), np.binary_repr(fpga.read_int('from_gpio_l'), width=8))
+    print 'Writing 0xFF to B . . . \n'
 
-print 'A: 0xff -------> B: 0x0'
+    fpga.write_int('to_gpio_g', 0)  # dummy data written to GPIO_GPIO
+    fpga.write_int('to_gpio_l', 0xFFFFFFFF) # data written to GPIO_LED
+    time.sleep(0.01)
 
-r.write_int('to_gpio_a',0xff)
-r.write_int('to_gpio_b',0)
-time.sleep(0.01)
+    print 'A: 0 <------------- B: 0xFF\n'
 
-from_a = r.read_int('from_gpio_a')
-from_b = r.read_int('from_gpio_b')
+    from_a = fpga.read_int('from_gpio_g') # read GPIO_GPIO
+    from_b = fpga.read_int('from_gpio_l') # read GPIO_LED
 
-print "Readback values: A: %s, B: %s " %(np.binary_repr(from_a,width=8),np.binary_repr(from_b,width=8))
+    print 'Readback values: A: %s, B: %s\n' % (np.binary_repr(from_a, width=8), np.binary_repr(from_b, width=8))
+    
+    print 'Writing 0x00 to B . . . \n'
+    print 'A: 0xFF <---------- B: 0x00\n'
 
+    fpga.write_int('to_gpio_g', 0xFFFFFFFF) # dummy data written to GPIO_GPIO
+    fpga.write_int('to_gpio_l', 0x0) # data written to GPIO_LED
+    time.sleep(0.01)
+
+    from_a = fpga.read_int('from_gpio_g') # read GPIO_GPIO
+    from_b = fpga.read_int('from_gpio_l') # read GPIO_LED
+    
+    print 'Readback values: A: %s, B: %s\n' % (np.binary_repr(from_a, width=8), np.binary_repr(from_b, width=8))
+    
+    print '##################################'
+    # Send from GPIO_GPIO  (A) to GPIO_LED (B) 
+    print '\nConfiguring to send from GPIO_GPIO (A) to GPIO_LED (B)\n'
+    fpga.write_int('g_is_input', 0) # GPIO_GPIO as output
+    fpga.write_int('l_is_input', 1) # GPIO_LED as input
+
+    print 'Initial Values: A: %s, B: %s\n' % (np.binary_repr(fpga.read_int('from_gpio_g'), width=8), np.binary_repr(fpga.read_int('from_gpio_l'), width=8))
+    print 'Writing 0x00 to A . . . \n'
+    
+    fpga.write_int('to_gpio_g', 0)  # data written to GPIO_GPIO
+    fpga.write_int('to_gpio_l', 0xFFFFFFFF) # dummy data written to GPIO_LED
+    time.sleep(0.01)
+
+    print 'A: 0 -------------> B: 0xFF\n'
+
+    from_a = fpga.read_int('from_gpio_g') # read GPIO_GPIO
+    from_b = fpga.read_int('from_gpio_l') # read GPIO_LED
+
+    print 'Readback values: A: %s, B: %s\n' % (np.binary_repr(from_a, width=8), np.binary_repr(from_b, width=8))
+    
+    print 'Writing 0xFF to A . . . \n'
+    
+    print 'A: 0xFF ----------> B: 0x00\n'
+
+    fpga.write_int('to_gpio_g', 0xFFFFFFFF) # data written to GPIO_GPIO
+    fpga.write_int('to_gpio_l', 0x0) # dummy data written to GPIO_LED
+    time.sleep(0.01)
+
+    from_a = fpga.read_int('from_gpio_g') # read GPIO_GPIO
+    from_b = fpga.read_int('from_gpio_l') # read GPIO_LED
+    
+    print 'Readback values: A: %s, B: %s\n' % (np.binary_repr(from_a, width=8), np.binary_repr(from_b, width=8))
+
+except KeyboardInterrupt:
+    exit_clean()
+except Exception as inst:
+    exit_fail()
+
+exit_clean()
